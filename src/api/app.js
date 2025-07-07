@@ -10,20 +10,7 @@ const OpenFoodFactsDB = require('../db/database');
 const { performance } = require('perf_hooks');
 
 const app = express();
-
-/**
- * @type {OpenFoodFactsDB}
- * The database instance used by the application.
- * It's opened in read-only mode for safety and performance.
- */
-let db;
-try {
-  db = new OpenFoodFactsDB({ readonly: true });
-} catch (error) {
-  console.error("Failed to initialize the database. Ensure 'products.db' exists and is valid.");
-  console.error(error.message);
-  process.exit(1);
-}
+let db; // Will be initialized in main()
 
 // Middleware
 /**
@@ -100,6 +87,37 @@ app.get('/search/:term', (req, res) => {
   } catch (error) {
     console.error(`Error during search for term "${term}":`, error);
     res.status(500).json({ error: 'An error occurred during the search.' });
+  }
+});
+
+/**
+ * @api {get} /search/semantic/:term Perform Semantic Search for Products
+ * @apiName SemanticSearchProducts
+ * @apiGroup Product
+ *
+ * @apiParam {String} term The search term to find semantically similar products for.
+ * @apiQuery {Number{1-100}} [limit=10] The maximum number of results to return.
+ *
+ * @apiSuccess {Object[]} products An array of matching product objects, ordered by similarity.
+ */
+app.get('/search/semantic/:term', async (req, res) => {
+  const { term } = req.params;
+  const limit = req.query.limit ? parseInt(req.query.limit, 10) : 10;
+
+  if (!term) {
+    return res.status(400).json({ error: 'Search term is required' });
+  }
+
+  if (isNaN(limit) || limit <= 0 || limit > 100) {
+    return res.status(400).json({ error: 'Invalid limit parameter. Must be a positive integer <= 100.' });
+  }
+
+  try {
+    const results = await db.semanticSearch(term, { limit });
+    res.json(results);
+  } catch (error) {
+    console.error(`Error during semantic search for term "${term}":`, error);
+    res.status(500).json({ error: 'An error occurred during the semantic search.' });
   }
 });
 
@@ -224,4 +242,25 @@ app.get('/', (req, res) => {
   `);
 });
 
-module.exports = { app, db }; 
+/**
+ * Initializes the database and starts the application.
+ * This is the main entry point.
+ */
+async function main() {
+  try {
+    console.log("Initializing application...");
+    db = await OpenFoodFactsDB.create();
+    console.log("Database connection successful.");
+    return app; // Return the configured app
+  } catch (error) {
+    console.error("Failed to initialize the application:", error);
+    process.exit(1);
+  }
+}
+
+
+module.exports = {
+  db, // Note: db will be undefined until main() is called
+  app,
+  main
+}; 
