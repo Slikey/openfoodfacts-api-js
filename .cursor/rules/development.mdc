@@ -1,0 +1,356 @@
+---
+alwaysApply: true
+---
+
+# OpenFoodFacts DB - Core Development Rules
+
+This document outlines the essential rules for developing the `openfoodfacts-db` project. Adherence to these rules is mandatory to ensure the project remains fast, scalable, and maintainable. The primary goal is a blazing-fast, read-only API serving a pre-processed SQLite database.
+
+## 0. Powershell not Linux!
+You are using Powershell. You will not attempt to use commands like && and other frequent misuses of powershell.
+
+## 1. Core Philosophy: Speed and Simplicity
+
+- **Runtime is Read-Only**: The API server **NEVER** modifies the database. All data processing, import, and indexing happens in offline scripts.
+- **Performance is Paramount**: Every design decision must prioritize query speed and low startup time for the API.
+- **Fail Fast**: The runtime application assumes the database is correctly formed. If it's not, it should fail immediately rather than attempting to self-repair.
+
+## 2. Application Lifecycles
+
+There are two distinct, completely separate lifecycles. Code from one must not be mixed with the other.
+
+### A. Setup & Import Lifecycle
+
+- **Purpose**: To create and populate the SQLite database file from the raw OpenFoodFacts data.
+- **Tasks**:
+  - Download raw data.
+  - Create database schema.
+  - Clean, transform, and insert data into the `products` table.
+  - Populate the `search_text` column for FTS.
+  - Create and populate the `products_fts` FTS5 index.
+- **Characteristics**: These are long-running, resource-intensive operations. They are executed manually or via CI, never by the runtime server.
+
+### B. Runtime Lifecycle (API Server)
+
+- **Purpose**: To serve read-only queries from the pre-built database.
+- **Tasks**:
+  - Open a connection to the SQLite database file.
+  - Prepare SQL statements for reuse.
+  - Execute fast searches and lookups.
+- **Characteristics**:
+  - **Extremely fast startup.**
+  - **No database writes.**
+  - **No schema checks or migrations.**
+  - **No index building or maintenance.**
+
+## 3. Database Schema
+
+The database contains a single primary table, `products`.
+
+### `products` Table
+
+```sql
+CREATE TABLE products (
+  id TEXT PRIMARY KEY,
+  code TEXT,
+  product_name TEXT,
+  brands TEXT,
+  categories TEXT,
+  countries TEXT,
+  
+  -- Nutritional data (extracted for indexing)
+  energy_kcal REAL,
+  fat_100g REAL,
+  saturated_fat_100g REAL,
+  carbohydrates_100g REAL,
+  sugars_100g REAL,
+  proteins_100g REAL,
+  salt_100g REAL,
+  fiber_100g REAL,
+  
+  -- Scores
+  nutriscore_grade TEXT,
+  nova_group INTEGER,
+  ecoscore_grade TEXT,
+  
+  -- Status and completion
+  completeness REAL,
+  last_modified_t INTEGER,
+  
+  -- Full JSON data (preserves everything)
+  raw_data TEXT,
+  
+  -- Search fields
+  search_text TEXT, -- Combined searchable text for FTS5
+  
+  -- Timestamps
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### `products_fts` FTS5 Table
+
+A virtual FTS5 table is built on top of the `products` table for fast text search.
+
+```sql
+CREATE VIRTUAL TABLE products_fts USING fts5(
+  id,
+  search_text,
+  content='products',
+  content_rowid='rowid'
+);
+```
+
+The `search_text` column should be populated during the import process by concatenating relevant fields like `product_name`, `brands`, `code`, and `categories`.
+
+## 4. Forbidden Patterns (NEVER DO THESE IN RUNTIME CODE)
+
+### ❌ Slow, Blocking Constructors
+
+**DO NOT** perform schema creation, data validation, or index building in the runtime database class constructor.
+
+```javascript
+// AVOID: This constructor is slow and violates lifecycle separation.
+class Database {
+  constructor(dbPath) {
+    this.db = new Database(dbPath);
+    // ❌ WRONG: These belong in the setup/import script.
+    this.db.exec('CREATE TABLE IF NOT EXISTS ...');
+    this.rebuildFTSIndex(); 
+    const count = this.db.prepare('SELECT COUNT(*) FROM products').get(); // ❌ Way too slow!
+  }
+}
+```
+
+### ❌ Slow Search Queries
+
+**DO NOT** use `LIKE` for text searches. Always use the FTS5 index.
+
+```javascript
+// AVOID: This query is inefficient and will not scale.
+const sql = `SELECT * FROM products WHERE product_name LIKE ?`; // ❌ SLOW
+```
+
+## 5. Approved Patterns (THE CORRECT WAY)
+
+### ✅ Fast, Non-Blocking Constructors
+
+The runtime constructor should do the bare minimum: open the database and prepare statements.
+
+```javascript
+// CORRECT: This constructor is fast and ready for runtime.
+class Database {
+  constructor(dbPath) {
+    this.db = new Database(dbPath, { readonly: true }); // Open in read-only mode.
+    this.db.pragma('journal_mode = WAL');
+    this.prepareStatements(); // Prepare statements for fast execution.
+  }
+
+  prepareStatements() {
+    this.stmtSearch = this.db.prepare(`
+      SELECT p.* 
+      FROM products_fts f
+      JOIN products p ON p.rowid = f.rowid
+      WHERE f.products_fts MATCH ?
+      ORDER BY bm25(f.products_fts) -- Order by relevance
+      LIMIT 50
+    `);
+  }
+}
+```
+
+### ✅ Fast FTS5 Search
+
+Use the prepared statement with the FTS index for all text searches.
+
+```javascript
+// CORRECT: This query is indexed and extremely fast.
+function search(term) {
+  // Add wildcard for prefix search
+  const ftsTerm = term.split(/\s+/).filter(t => t).map(t => `${t}*`).join(' ');
+  return this.stmtSearch.all(ftsTerm);
+}
+```
+
+## 6. Enforcement
+
+- Any pull request that violates these rules, especially regarding runtime performance and lifecycle separation, will be rejected.
+- Performance regressions in the API constructor or core search queries are not acceptable.
+- The project prioritizes the 99% use case: fast, read-only queries. Setup and import complexity is an acceptable trade-off for runtime simplicity.
+
+Remember: The database must start FAST and search FAST. If it's broken, let it break loudly rather than silently fixing it with expensive operations.# OpenFoodFacts DB - Core Development Rules
+
+This document outlines the essential rules for developing the `openfoodfacts-db` project. Adherence to these rules is mandatory to ensure the project remains fast, scalable, and maintainable. The primary goal is a blazing-fast, read-only API serving a pre-processed SQLite database.
+
+## 1. Core Philosophy: Speed and Simplicity
+
+- **Runtime is Read-Only**: The API server **NEVER** modifies the database. All data processing, import, and indexing happens in offline scripts.
+- **Performance is Paramount**: Every design decision must prioritize query speed and low startup time for the API.
+- **Fail Fast**: The runtime application assumes the database is correctly formed. If it's not, it should fail immediately rather than attempting to self-repair.
+
+## 2. Application Lifecycles
+
+There are two distinct, completely separate lifecycles. Code from one must not be mixed with the other.
+
+### A. Setup & Import Lifecycle
+
+- **Purpose**: To create and populate the SQLite database file from the raw OpenFoodFacts data.
+- **Tasks**:
+  - Download raw data.
+  - Create database schema.
+  - Clean, transform, and insert data into the `products` table.
+  - Populate the `search_text` column for FTS.
+  - Create and populate the `products_fts` FTS5 index.
+- **Characteristics**: These are long-running, resource-intensive operations. They are executed manually or via CI, never by the runtime server.
+
+### B. Runtime Lifecycle (API Server)
+
+- **Purpose**: To serve read-only queries from the pre-built database.
+- **Tasks**:
+  - Open a connection to the SQLite database file.
+  - Prepare SQL statements for reuse.
+  - Execute fast searches and lookups.
+- **Characteristics**:
+  - **Extremely fast startup.**
+  - **No database writes.**
+  - **No schema checks or migrations.**
+  - **No index building or maintenance.**
+
+## 3. Database Schema
+
+The database contains a single primary table, `products`.
+
+### `products` Table
+
+```sql
+CREATE TABLE products (
+  id TEXT PRIMARY KEY,
+  code TEXT,
+  product_name TEXT,
+  brands TEXT,
+  categories TEXT,
+  countries TEXT,
+  
+  -- Nutritional data (extracted for indexing)
+  energy_kcal REAL,
+  fat_100g REAL,
+  saturated_fat_100g REAL,
+  carbohydrates_100g REAL,
+  sugars_100g REAL,
+  proteins_100g REAL,
+  salt_100g REAL,
+  fiber_100g REAL,
+  
+  -- Scores
+  nutriscore_grade TEXT,
+  nova_group INTEGER,
+  ecoscore_grade TEXT,
+  
+  -- Status and completion
+  completeness REAL,
+  last_modified_t INTEGER,
+  
+  -- Full JSON data (preserves everything)
+  raw_data TEXT,
+  
+  -- Search fields
+  search_text TEXT, -- Combined searchable text for FTS5
+  
+  -- Timestamps
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### `products_fts` FTS5 Table
+
+A virtual FTS5 table is built on top of the `products` table for fast text search.
+
+```sql
+CREATE VIRTUAL TABLE products_fts USING fts5(
+  id,
+  search_text,
+  content='products',
+  content_rowid='rowid'
+);
+```
+
+The `search_text` column should be populated during the import process by concatenating relevant fields like `product_name`, `brands`, `code`, and `categories`.
+
+## 4. Forbidden Patterns (NEVER DO THESE IN RUNTIME CODE)
+
+### ❌ Slow, Blocking Constructors
+
+**DO NOT** perform schema creation, data validation, or index building in the runtime database class constructor.
+
+```javascript
+// AVOID: This constructor is slow and violates lifecycle separation.
+class Database {
+  constructor(dbPath) {
+    this.db = new Database(dbPath);
+    // ❌ WRONG: These belong in the setup/import script.
+    this.db.exec('CREATE TABLE IF NOT EXISTS ...');
+    this.rebuildFTSIndex(); 
+    const count = this.db.prepare('SELECT COUNT(*) FROM products').get(); // ❌ Way too slow!
+  }
+}
+```
+
+### ❌ Slow Search Queries
+
+**DO NOT** use `LIKE` for text searches. Always use the FTS5 index.
+
+```javascript
+// AVOID: This query is inefficient and will not scale.
+const sql = `SELECT * FROM products WHERE product_name LIKE ?`; // ❌ SLOW
+```
+
+## 5. Approved Patterns (THE CORRECT WAY)
+
+### ✅ Fast, Non-Blocking Constructors
+
+The runtime constructor should do the bare minimum: open the database and prepare statements.
+
+```javascript
+// CORRECT: This constructor is fast and ready for runtime.
+class Database {
+  constructor(dbPath) {
+    this.db = new Database(dbPath, { readonly: true }); // Open in read-only mode.
+    this.db.pragma('journal_mode = WAL');
+    this.prepareStatements(); // Prepare statements for fast execution.
+  }
+
+  prepareStatements() {
+    this.stmtSearch = this.db.prepare(`
+      SELECT p.* 
+      FROM products_fts f
+      JOIN products p ON p.rowid = f.rowid
+      WHERE f.products_fts MATCH ?
+      ORDER BY bm25(f.products_fts) -- Order by relevance
+      LIMIT 50
+    `);
+  }
+}
+```
+
+### ✅ Fast FTS5 Search
+
+Use the prepared statement with the FTS index for all text searches.
+
+```javascript
+// CORRECT: This query is indexed and extremely fast.
+function search(term) {
+  // Add wildcard for prefix search
+  const ftsTerm = term.split(/\s+/).filter(t => t).map(t => `${t}*`).join(' ');
+  return this.stmtSearch.all(ftsTerm);
+}
+```
+
+## 6. Enforcement
+
+- Any pull request that violates these rules, especially regarding runtime performance and lifecycle separation, will be rejected.
+- Performance regressions in the API constructor or core search queries are not acceptable.
+- The project prioritizes the 99% use case: fast, read-only queries. Setup and import complexity is an acceptable trade-off for runtime simplicity.
+
+Remember: The database must start FAST and search FAST. If it's broken, let it break loudly rather than silently fixing it with expensive operations.

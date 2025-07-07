@@ -1,0 +1,54 @@
+{
+  "name": "openfoodfacts-db",
+  "version": "1.0.0",
+  "description": "High-performance OpenFoodFacts database with SQLite backend and REST API",
+  "main": "src/api/server.js",
+  "scripts": {
+    "setup": "node -e \"require('fs').mkdirSync('data', { recursive: true })\"",
+    "download": "node src/scripts/download.js",
+    "start": "node src/api/server.js",
+    "import": "node src/scripts/import.js",
+    "update": "node src/scripts/update.js",
+    "rebuild-fts": "node src/scripts/rebuild-fts.js",
+    "test": "jest",
+    "benchmark": "node src/scripts/benchmark.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/username/openfoodfacts-db.git"
+  },
+  "dependencies": {
+    "better-sqlite3": "^9.2.2",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "readline": "^1.3.0"
+  },
+  "devDependencies": {
+    "autocannon": "^7.12.0",
+    "benchmark": "^2.1.4",
+    "clinic": "^12.1.0",
+    "jest": "^30.0.4",
+    "nodemon": "^3.0.2",
+    "supertest": "^7.1.1",
+    "table": "^6.8.1"
+  },
+  "keywords": [
+    "openfoodfacts",
+    "database",
+    "sqlite",
+    "api",
+    "food",
+    "nutrition",
+    "search",
+    "nodejs"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "bugs": {
+    "url": "https://github.com/username/openfoodfacts-db/issues"
+  },
+  "homepage": "https://github.com/username/openfoodfacts-db#readme"
+}
