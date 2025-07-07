@@ -62,6 +62,7 @@ function transformProduct(line) {
       nova_group: p.nova_group || null,
       ecoscore_grade: p.ecoscore_grade || null,
       completeness: isComplete ? 1.0 : (p.completeness || 0.0),
+      complete_macros: hasMacros ? 1 : 0,
       last_modified_t: p.last_modified_t || null,
       raw_data: line,
       search_text: searchTextParts.filter(Boolean).join(' '),

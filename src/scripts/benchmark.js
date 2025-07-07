@@ -14,7 +14,7 @@ function runBenchmarks() {
   }
 
   const suite = new Benchmark.Suite;
-  const knownId = '3017620422003'; // Coca-Cola barcode
+  const knownId = '3017620422003'; // Nutella barcode
 
   console.log(`\n🔬 Benchmarking functions with database: ${db.db.name}`);
   console.log('--------------------------------------------------');

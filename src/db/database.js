@@ -75,6 +75,7 @@ class OpenFoodFactsDB {
         nova_group INTEGER,
         ecoscore_grade TEXT,
         completeness REAL,
+        complete_macros INTEGER,
         last_modified_t INTEGER,
         raw_data TEXT,
         search_text TEXT,
@@ -117,7 +118,7 @@ class OpenFoodFactsDB {
       SELECT p.*
       FROM products_fts f
       JOIN products p ON p.rowid = f.rowid
-      WHERE f.products_fts MATCH ? AND p.completeness = 1.0
+      WHERE f.products_fts MATCH ? AND p.complete_macros = 1
       ORDER BY bm25(f.products_fts)
       LIMIT ?
     `);
@@ -160,8 +161,8 @@ class OpenFoodFactsDB {
    * Performs a full-text search for products.
    * @param {string} term The search term. Can be a product name, brand, category, etc.
    * @param {object} [options={}] Search options.
-   * @param {number} [options.limit=50] The maximum number of results to return.
-   * @param {boolean} [options.completeOnly=false] Whether to only search for products with complete data.
+   * @param {number} [options.limit=10] The maximum number of results to return.
+   * @param {boolean} [options.completeOnly=true] Whether to only search for products with complete data.
    * @returns {Array<object>} An array of matching product objects.
    */
   search(term, options = {}) {
@@ -169,11 +170,18 @@ class OpenFoodFactsDB {
       return [];
     }
 
-    let { limit = 10, completeOnly = false } = options;
+    let { limit = 10, completeOnly = true } = options;
     limit = Math.min(Math.max(limit, 1), 100);
 
-    // Sanitize and format the term for FTS5 prefix search (e.g., "coca cola" -> "coca* cola*")
-    const ftsTerm = term.split(/\s+/).filter(t => t).map(t => `${t.replace(/"/g, '""')}*`).join(' ');
+    // Sanitize and format the term for FTS5.
+    // Each token is wrapped in double quotes to be treated as a literal,
+    // preventing characters like '-' from being interpreted as operators.
+    // A wildcard '*' is appended for prefix searching.
+    const ftsTerm = term
+      .split(/\s+/)
+      .filter(t => t)
+      .map(t => `"${t.replace(/"/g, '""')}"*`)
+      .join(' ');
 
     const statement = completeOnly ? this.stmtSearchComplete : this.stmtSearch;
     return statement.all(ftsTerm, limit);

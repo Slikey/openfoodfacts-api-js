@@ -27,12 +27,12 @@ function prepareStatements(db) {
     INSERT OR REPLACE INTO products (
       id, code, product_name, brands, categories, countries, energy_kcal, fat_100g,
       saturated_fat_100g, carbohydrates_100g, sugars_100g, proteins_100g, salt_100g,
-      fiber_100g, nutriscore_grade, nova_group, ecoscore_grade, completeness,
+      fiber_100g, nutriscore_grade, nova_group, ecoscore_grade, completeness, complete_macros,
       last_modified_t, raw_data, search_text
     ) VALUES (
       @id, @code, @product_name, @brands, @categories, @countries, @energy_kcal, @fat_100g,
       @saturated_fat_100g, @carbohydrates_100g, @sugars_100g, @proteins_100g, @salt_100g,
-      @fiber_100g, @nutriscore_grade, @nova_group, @ecoscore_grade, @completeness,
+      @fiber_100g, @nutriscore_grade, @nova_group, @ecoscore_grade, @completeness, @complete_macros,
       @last_modified_t, @raw_data, @search_text
     )
   `);
