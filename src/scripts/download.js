@@ -8,7 +8,7 @@
 const fs = require('fs');
 const zlib = require('zlib');
 const { pipeline } = require('stream/promises');
-const { Readable } = require('stream');
+const { Readable, Transform } = require('stream');
 const { SOURCE_PATH, DATA_DIR } = require('../db/constants');
 
 const SOURCE_URL = 'https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz';
@@ -31,7 +31,25 @@ async function runDownload() {
     if (!res.ok) {
       throw new Error(`Failed to download: ${res.status} ${res.statusText}`);
     }
-    await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(compressedPath));
+
+    const totalSize = parseInt(res.headers.get('content-length'), 10);
+    let downloadedSize = 0;
+    const progressStream = new Transform({
+      transform(chunk, encoding, callback) {
+        downloadedSize += chunk.length;
+        if (totalSize) {
+          const percentage = Math.floor((downloadedSize / totalSize) * 100);
+          process.stdout.write(`Downloading... ${percentage}% (${(downloadedSize / 1024 / 1024).toFixed(2)}MB / ${(totalSize / 1024 / 1024).toFixed(2)}MB)\r`);
+        } else {
+          process.stdout.write(`Downloading... ${(downloadedSize / 1024 / 1024).toFixed(2)}MB\r`);
+        }
+        this.push(chunk);
+        callback();
+      }
+    });
+
+    await pipeline(Readable.fromWeb(res.body), progressStream, fs.createWriteStream(compressedPath));
+    process.stdout.write('\n');
     console.log('✅ Download complete.');
 
     // 2. Decompress the file
@@ -39,7 +57,17 @@ async function runDownload() {
     const gunzip = zlib.createGunzip();
     const source = fs.createReadStream(compressedPath);
     const destination = fs.createWriteStream(SOURCE_PATH);
+
+    const compressedFileSize = fs.statSync(compressedPath).size;
+    let readSize = 0;
+    source.on('data', (chunk) => {
+      readSize += chunk.length;
+      const percentage = Math.floor((readSize / compressedFileSize) * 100);
+      process.stdout.write(`Decompressing... ${percentage}%\r`);
+    });
+
     await pipeline(source, gunzip, destination);
+    process.stdout.write('\n');
     console.log('✅ Decompression complete.');
 
     // 3. Clean up the compressed file

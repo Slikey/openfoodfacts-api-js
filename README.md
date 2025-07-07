@@ -33,10 +33,11 @@ This separation ensures the API remains fast and reliable, offloading all heavy 
 │   │   ├── database.js
 │   │   └── transformer.js
 │   └── scripts/      # Offline scripts for setup and maintenance
+│       ├── benchmark.js
+│       ├── download.js
 │       ├── import.js
-│       ├── update.js
 │       ├── rebuild-fts.js
-│       └── benchmark.js
+│       └── update.js
 ├── data/             # (Created by setup) Holds the database and source files
 └── package.json
 ```
