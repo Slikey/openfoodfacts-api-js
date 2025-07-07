@@ -137,6 +137,22 @@ If you ever need to manually rebuild the FTS5 search index (e.g., after changing
 npm run rebuild-fts
 ```
 
+## Benchmark Result
+
+System used to generate the benchmark is a AMD 9950x3D with 64 GB of 6000 MHz DDR5 memory.
+
+```
+🔬 Benchmarking functions with database: C:\Users\kevin\Documents\Source\openfoodfacts-db\data\products.db
+--------------------------------------------------
+get(id) x 4,864 ops/sec ±1.06% (93 runs sampled)
+search("Nutella") x 691 ops/sec ±1.23% (89 runs sampled)
+search(barcode) x 86,690 ops/sec ±1.23% (89 runs sampled)
+search("organic chicken broth") x 25.35 ops/sec ±0.89% (46 runs sampled)
+search("organic chicken broth", { completeOnly: true }) x 26.50 ops/sec ±0.79% (48 runs sampled)
+search(no results) x 90,876 ops/sec ±0.69% (97 runs sampled)
+--------------------------------------------------
+```
+
 ## License
 
 This project is licensed under the MIT License. 

@@ -10,17 +10,20 @@ const zlib = require('zlib');
 const { pipeline } = require('stream/promises');
 const { Readable, Transform } = require('stream');
 const { SOURCE_PATH, DATA_DIR } = require('../db/constants');
+const path = require('path');
+const { DownloaderHelper } = require('node-downloader-helper');
 
 const SOURCE_URL = 'https://static.openfoodfacts.org/data/openfoodfacts-products.jsonl.gz';
 
 async function runDownload() {
+  // Ensure the data directory exists
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+
+  const stats = fs.statSync(DATA_DIR, { throwIfNoEntry: false });
+  const lastModifiedTime = stats ? stats.mtime.toISOString() : null;
+
   console.log(`🚀 Starting download of full dataset from ${SOURCE_URL}...`);
   console.log('This is a large file and may take some time.');
-
-  if (!fs.existsSync(DATA_DIR)) {
-    console.log(`Data directory not found at ${DATA_DIR}. Creating it...`);
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
 
   const compressedPath = `${SOURCE_PATH}.gz`;
 

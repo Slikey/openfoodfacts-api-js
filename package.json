@@ -4,7 +4,6 @@
   "description": "High-performance OpenFoodFacts database with SQLite backend and REST API",
   "main": "src/api/server.js",
   "scripts": {
-    "setup": "node -e \"require('fs').mkdirSync('data', { recursive: true })\"",
     "download": "node src/scripts/download.js",
     "start": "node src/api/server.js",
     "import": "node src/scripts/import.js",
