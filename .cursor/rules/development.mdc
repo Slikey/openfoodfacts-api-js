@@ -6,9 +6,6 @@ alwaysApply: true
 
 This document outlines the essential rules for developing the `openfoodfacts-db` project. Adherence to these rules is mandatory to ensure the project remains fast, scalable, and maintainable. The primary goal is a blazing-fast, read-only API serving a pre-processed SQLite database.
 
-## 0. Powershell not Linux!
-You are using Powershell. You will not attempt to use commands like && and other frequent misuses of powershell.
-
 ## 1. Core Philosophy: Speed and Simplicity
 
 - **Runtime is Read-Only**: The API server **NEVER** modifies the database. All data processing, import, and indexing happens in offline scripts.
